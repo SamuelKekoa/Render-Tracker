@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Render">
+<meta name="theme-color" content="#0b0b0d">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="apple-touch-icon.png">
+<title>Render Tracker</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --bg: #0b0b0d;
+    --card: #151519;
+    --line: #24242a;
+    --text: #f3f3f5;
+    --muted: #8d8d97;
+    --accent: #ff8a2a;
+    --ok: #3ddc84;
+    --warn: #ffb020;
+    --bad: #ff5d5d;
+    --track: #1f1f25;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); }
+  body {
+    font: 16px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    min-height: 100vh; min-height: 100dvh;
+    padding: calc(env(safe-area-inset-top) + 14px) 16px calc(env(safe-area-inset-bottom) + 18px);
+    display: flex; flex-direction: column;
+    -webkit-user-select: none; user-select: none;
+  }
+  .num { font-variant-numeric: tabular-nums; }
+  header { display: flex; align-items: center; gap: 10px; min-height: 36px; }
+  header .title { flex: 1; min-width: 0; }
+  header .file { font-weight: 650; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  header .sub { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600;
+          padding: 5px 10px; border-radius: 99px; background: var(--card); color: var(--muted); flex: none; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--muted); }
+  .pill.live .dot { background: var(--ok); box-shadow: 0 0 0 0 rgba(61,220,132,.6); animation: pulse 2s infinite; }
+  .pill.warn .dot { background: var(--warn); }
+  .pill.bad .dot { background: var(--bad); }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(61,220,132,.55); } 70% { box-shadow: 0 0 0 7px rgba(61,220,132,0); } 100% { box-shadow: 0 0 0 0 rgba(61,220,132,0); } }
+  .iconbtn { background: none; border: 0; color: var(--muted); padding: 6px; margin-right: -6px; cursor: pointer; flex: none; }
+  .iconbtn svg { width: 22px; height: 22px; display: block; }
+
+  main { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 22px; padding: 18px 0 8px; }
+  .ringwrap { position: relative; width: min(74vw, 290px); aspect-ratio: 1; margin: 0 auto; }
+  .ringwrap svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-track { stroke: var(--track); }
+  .ring-bar { stroke: var(--accent); transition: stroke-dashoffset 1s linear, stroke .4s; }
+  .ring-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
+  .pct { font-size: clamp(52px, 17vw, 70px); font-weight: 700; letter-spacing: -2px; line-height: 1; }
+  .pct small { font-size: .42em; font-weight: 600; letter-spacing: 0; color: var(--muted); margin-left: 2px; }
+  .frames { color: var(--muted); font-size: 14px; margin-top: 8px; }
+
+  .eta { text-align: center; }
+  .eta .big { font-size: 28px; font-weight: 700; letter-spacing: -.5px; }
+  .eta .small { color: var(--muted); font-size: 15px; margin-top: 2px; }
+
+  .bar { height: 6px; background: var(--track); border-radius: 99px; overflow: hidden; }
+  .bar > div { height: 100%; width: 0; background: var(--accent); border-radius: 99px; transition: width 1s linear; }
+  .framebar { display: grid; gap: 7px; }
+  .framebar .lbl { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .stat { background: var(--card); border-radius: 14px; padding: 12px 14px; }
+  .stat .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 600; }
+  .stat .v { font-size: 19px; font-weight: 650; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+  .banner { border-radius: 14px; padding: 12px 14px; font-size: 14px; display: none; }
+  .banner.show { display: block; }
+  .banner.warn { background: rgba(255,176,32,.12); color: #ffd27a; }
+  .banner.bad { background: rgba(255,93,93,.12); color: #ff9c9c; }
+
+  footer { color: var(--muted); font-size: 12px; text-align: center; display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .chip { background: var(--card); border: 0; color: var(--muted); font: inherit; font-size: 13px; padding: 8px 14px; border-radius: 99px; cursor: pointer; }
+  .chip.on { color: var(--text); background: #26262d; }
+
+  body.done .ring-bar, body.done .bar > div { stroke: var(--ok); background: var(--ok); }
+  body.cancelled .ring-bar, body.cancelled .bar > div { stroke: var(--muted); background: var(--muted); }
+  body.stalled .ring-bar { stroke: var(--warn); }
+
+  .toast { position: fixed; left: 50%; top: calc(env(safe-area-inset-top) + 12px); transform: translate(-50%, -140%);
+           background: #1f2a22; color: #b9f5d0; padding: 10px 16px; border-radius: 12px; font-size: 14px; font-weight: 600;
+           transition: transform .35s ease; z-index: 10; max-width: calc(100% - 32px); text-align: center; }
+  .toast.show { transform: translate(-50%, 0); }
+
+  /* Setup sheet */
+  .setup { display: none; flex: 1; flex-direction: column; justify-content: center; gap: 16px; padding: 10px 0; }
+  body.needs-setup .setup { display: flex; }
+  body.needs-setup main, body.needs-setup footer { display: none; }
+  .setup h1 { font-size: 26px; margin: 0; letter-spacing: -.4px; }
+  .setup p { color: var(--muted); margin: 0; font-size: 15px; }
+  .setup label { font-size: 13px; color: var(--muted); font-weight: 600; display: block; margin-bottom: 6px; }
+  .setup input { width: 100%; font: inherit; font-size: 16px; color: var(--text); background: var(--card); border: 1px solid var(--line);
+                 border-radius: 12px; padding: 13px 14px; -webkit-user-select: text; user-select: text; }
+  .setup input:focus { outline: 2px solid var(--accent); outline-offset: -1px; }
+  .setup details summary { color: var(--muted); font-size: 14px; cursor: pointer; }
+  .primary { background: var(--accent); color: #1a0d00; border: 0; font: inherit; font-weight: 700; font-size: 16px;
+             padding: 14px; border-radius: 14px; cursor: pointer; }
+  .hint { background: var(--card); border-radius: 14px; padding: 12px 14px; color: var(--muted); font-size: 14px; }
+  .hint b { color: var(--text); }
+</style>
+</head>
+<body class="waiting">
+
+<div class="toast" id="toast"></div>
+
+<header>
+  <div class="title">
+    <div class="file" id="file">Render Tracker</div>
+    <div class="sub" id="sub">Waiting for Blender</div>
+  </div>
+  <span class="pill" id="conn"><span class="dot"></span><span id="connText">Connecting</span></span>
+  <button class="iconbtn" id="settingsBtn" aria-label="Settings">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+  </button>
+</header>
+
+<section class="setup">
+  <h1>Connect to Blender</h1>
+  <p>In Blender, open <b>Properties › Output › Render Tracker</b> and tap <b>Copy Phone Link</b>, then open that link here. Or paste the channel name:</p>
+  <div>
+    <label for="chanIn">Channel</label>
+    <input id="chanIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="render-…">
+  </div>
+  <details>
+    <summary>Advanced</summary>
+    <div style="margin-top:10px">
+      <label for="srvIn">Relay server</label>
+      <input id="srvIn" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://ntfy.sh">
+    </div>
+  </details>
+  <button class="primary" id="saveBtn">Connect</button>
+  <div class="hint">Tip: once it's connected, tap <b>Share › Add to Home Screen</b> so it opens like an app.</div>
+</section>
+
+<main>
+  <div class="ringwrap">
+    <svg viewBox="0 0 120 120" aria-hidden="true">
+      <circle class="ring-track" cx="60" cy="60" r="52" fill="none" stroke-width="9"/>
+      <circle class="ring-bar" id="ring" cx="60" cy="60" r="52" fill="none" stroke-width="9" stroke-linecap="round"
+              stroke-dasharray="326.73" stroke-dashoffset="326.73"/>
+    </svg>
+    <div class="ring-center">
+      <div class="pct num" id="pct">–</div>
+      <div class="frames num" id="frames">No render yet</div>
+    </div>
+  </div>
+
+  <div class="eta">
+    <div class="big num" id="etaBig">Waiting for a render</div>
+    <div class="small num" id="etaSmall">Start rendering in Blender and this updates on its own</div>
+  </div>
+
+  <div class="framebar" id="framebarWrap">
+    <div class="lbl"><span id="frameLbl">Current frame</span><span class="num" id="frameRight"></span></div>
+    <div class="bar"><div id="frameBar"></div></div>
+  </div>
+
+  <div class="banner" id="banner"></div>
+
+  <div class="grid">
+    <div class="stat"><div class="k">Elapsed</div><div class="v num" id="sElapsed">–</div></div>
+    <div class="stat"><div class="k">Per frame</div><div class="v num" id="sAvg">–</div></div>
+    <div class="stat"><div class="k">Last frame</div><div class="v num" id="sLast">–</div></div>
+    <div class="stat"><div class="k" id="sExtraK">Samples</div><div class="v num" id="sExtra">–</div></div>
+  </div>
+</main>
+
+<footer>
+  <div class="num" id="updated">&nbsp;</div>
+  <button class="chip" id="wakeBtn" hidden>Keep screen on</button>
+</footer>
+
+<script>
+(() => {
+  "use strict";
+  const DEFAULT_SERVER = "https://ntfy.sh";
+  const RING_LEN = 2 * Math.PI * 52;
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- config (URL hash first, then saved) ----------
+  function store(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (e) {} }
+  function load(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+  function readConfig() {
+    const h = new URLSearchParams(location.hash.slice(1));
+    let c = h.get("c"), s = h.get("s");
+    if (c) { store("rt_channel", c); store("rt_server", s || null); }
+    else { c = load("rt_channel"); s = load("rt_server"); }
+    return { channel: (c || "").trim(), server: (s || DEFAULT_SERVER).trim().replace(/\/+$/, "") };
+  }
+  let cfg = readConfig();
+
+  // ---------- state ----------
+  let job = null;          // last progress payload
+  let lastId = null;       // last relay message id
+  let es = null;
+  let conn = "connecting";
+  let gotAnyEvent = 0;
+
+  // ---------- formatting ----------
+  function dur(sec, withSeconds) {
+    if (sec == null || !isFinite(sec)) return "–";
+    sec = Math.max(0, Math.round(sec));
+    const d = Math.floor(sec / 86400), h = Math.floor(sec % 86400 / 3600), m = Math.floor(sec % 3600 / 60), s = sec % 60;
+    if (d) return `${d}d ${h}h`;
+    if (h) return `${h}h ${String(m).padStart(2, "0")}m`;
+    if (m) return withSeconds === false ? `${m}m` : `${m}m ${String(s).padStart(2, "0")}s`;
+    return `${s}s`;
+  }
+  function frameDur(sec) {
+    if (sec == null) return "–";
+    if (sec < 10) return sec.toFixed(1) + "s";
+    return dur(sec);
+  }
+  function clock(unix) {
+    const d = new Date(unix * 1000), now = new Date();
+    const t = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    const sameDay = d.toDateString() === now.toDateString();
+    if (sameDay) return t;
+    const tomorrow = new Date(now); tomorrow.setDate(now.getDate() + 1);
+    if (d.toDateString() === tomorrow.toDateString()) return "tomorrow " + t;
+    return d.toLocaleDateString([], { weekday: "short" }) + " " + t;
+  }
+  function ago(sec) {
+    if (sec < 10) return "just now";
+    if (sec < 60) return `${Math.round(sec)}s ago`;
+    if (sec < 3600) return `${Math.floor(sec / 60)} min ago`;
+    return `${(sec / 3600).toFixed(1)} h ago`;
+  }
+
+  // ---------- UI helpers ----------
+  function setConn(state) {
+    conn = state;
+    const pill = $("conn");
+    pill.className = "pill " + ({ live: "live", reconnecting: "warn", offline: "bad" }[state] || "");
+    $("connText").textContent = { live: "Live", reconnecting: "Reconnecting", offline: "Offline", connecting: "Connecting" }[state] || state;
+  }
+  let toastTimer;
+  function toast(text) {
+    const t = $("toast");
+    t.textContent = text;
+    t.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove("show"), 3500);
+  }
+  function setBanner(kind, text) {
+    const b = $("banner");
+    b.className = "banner" + (text ? " show " + kind : "");
+    b.textContent = text || "";
+  }
+  function setRing(frac) {
+    frac = Math.min(1, Math.max(0, frac));
+    const ring = $("ring");
+    ring.style.strokeDashoffset = (RING_LEN * (1 - frac)).toFixed(2);
+    ring.style.opacity = frac < 0.003 ? 0 : 1;
+  }
+  function setMode(mode) {
+    document.body.classList.remove("waiting", "rendering", "done", "cancelled", "stalled");
+    document.body.classList.add(mode);
+  }
+
+  // ---------- render loop ----------
+  function render() {
+    const now = Date.now() / 1000;
+    if (!job) {
+      setMode("waiting");
+      setRing(0);
+      $("pct").textContent = "–";
+      $("frames").textContent = "No render yet";
+      $("etaBig").textContent = "Waiting for a render";
+      $("etaSmall").textContent = "Start rendering in Blender and this updates on its own";
+      $("framebarWrap").style.visibility = "hidden";
+      $("updated").textContent = conn === "live" ? "Listening for Blender…" : " ";
+      document.title = "Render Tracker";
+      return;
+    }
+
+    const j = job;
+    const total = Math.max(1, j.total || 1);
+    const still = total === 1;
+    $("file").textContent = j.file || "Render";
+    $("sub").textContent = [j.scene, j.engine, j.res].filter(Boolean).join(" · ");
+    $("framebarWrap").style.visibility = "visible";
+
+    let frac, inFrame = 0, eta = null, stalled = false, mode = j.st;
+
+    if (j.st === "rendering") {
+      const sinceFrameStart = Math.max(0, now - j.fs);
+      if (j.fe) inFrame = Math.min(0.97, sinceFrameStart / j.fe);
+      else if (j.smp) inFrame = j.smp[0] / j.smp[1];
+      frac = Math.min(0.999, (j.done + inFrame) / total);
+      if (j.fe) eta = Math.max(0, (total - j.done) * j.fe - sinceFrameStart);
+      const quiet = now - j.t;
+      const allowed = (j.nxt || 60) * 2 + Math.max(120, (j.fe || 0) * 0.5);
+      stalled = quiet > allowed;
+      if (stalled) mode = "stalled";
+    } else if (j.st === "done") {
+      frac = 1;
+    } else {
+      frac = j.done / total;
+    }
+
+    setMode(mode === "stalled" ? "stalled" : j.st);
+    setRing(frac);
+    const pctVal = frac * 100;
+    const pctText = j.st === "done" ? "100" : (pctVal < 10 ? pctVal.toFixed(1) : Math.floor(pctVal).toString());
+    $("pct").innerHTML = `${pctText}<small>%</small>`;
+
+    if (still) {
+      $("frames").textContent = j.cur != null ? `Still · frame ${j.cur}` : "Still image";
+    } else {
+      $("frames").textContent = `${j.done} of ${total} frames`;
+    }
+
+    // ETA block
+    if (j.st === "rendering") {
+      if (eta == null) {
+        $("etaBig").textContent = "Working out time left…";
+        $("etaSmall").textContent = "Needs the first frame (or some samples) to finish";
+      } else if (eta < 1) {
+        $("etaBig").textContent = "Finishing up…";
+        $("etaSmall").textContent = "Should be done any moment";
+      } else {
+        $("etaBig").textContent = `${dur(eta, eta < 3600)} left`;
+        $("etaSmall").textContent = `Done around ${clock(now + eta)}`;
+      }
+    } else if (j.st === "done") {
+      const took = (j.ended || j.t) - j.started;
+      $("etaBig").textContent = `Finished in ${dur(took, took < 3600)}`;
+      $("etaSmall").textContent = `Completed ${clock(j.ended || j.t)}`;
+    } else if (j.st === "cancelled") {
+      $("etaBig").textContent = "Render cancelled";
+      $("etaSmall").textContent = `Stopped ${clock(j.ended || j.t)} after ${j.done} of ${total} frames`;
+    }
+
+    // current frame bar
+    if (j.st === "rendering") {
+      $("frameLbl").textContent = j.cur != null ? `Frame ${j.cur}` : "Starting…";
+      $("frameRight").textContent = j.fe ? `${Math.round(inFrame * 100)}% · ~${frameDur(j.fe)}` : "";
+      $("frameBar").style.width = (inFrame * 100).toFixed(1) + "%";
+    } else {
+      $("frameLbl").textContent = j.st === "done" ? "All frames rendered" : "Stopped";
+      $("frameRight").textContent = "";
+      $("frameBar").style.width = j.st === "done" ? "100%" : "0%";
+    }
+
+    // stats
+    const elapsedEnd = j.st === "rendering" ? now : (j.ended || j.t);
+    $("sElapsed").textContent = dur(elapsedEnd - j.started, true);
+    $("sAvg").textContent = frameDur(j.avg);
+    $("sLast").textContent = frameDur(j.last);
+    if (j.smp && j.st === "rendering") {
+      $("sExtraK").textContent = "Samples";
+      $("sExtra").textContent = `${j.smp[0]} / ${j.smp[1]}`;
+    } else {
+      $("sExtraK").textContent = "Computer";
+      $("sExtra").textContent = j.host || "–";
+    }
+
+    // banner
+    if (stalled) {
+      setBanner("warn", `No update from Blender for ${ago(now - j.t).replace(" ago", "")}. It may have crashed, frozen, or lost internet — or the computer went to sleep.`);
+    } else if (conn === "offline") {
+      setBanner("bad", "Can't reach the relay. Check your phone's connection.");
+    } else {
+      setBanner("", "");
+    }
+
+    $("updated").textContent = `Updated ${ago(now - j.t)}${j.host ? " · " + j.host : ""}`;
+    document.title = j.st === "rendering" ? `${pctText}% · ${j.file || "Render"}` : (j.st === "done" ? "✓ Done" : "Render Tracker");
+  }
+
+  // ---------- incoming messages ----------
+  function handleRelayMessage(m) {
+    if (!m || m.event !== "message" || typeof m.message !== "string") return;
+    lastId = m.id;
+    let p;
+    try { p = JSON.parse(m.message); } catch (e) { return; }
+    if (!p || p.v !== 1) return;
+    if (p.st === "test") {
+      if (Date.now() / 1000 - p.t < 120) toast(`Connected to ${p.host || "Blender"}`);
+      return;
+    }
+    const prev = job;
+    job = p;
+    if (prev && prev.st === "rendering" && p.id === prev.id && p.st === "done") toast("Render finished");
+    render();
+  }
+
+  async function fetchLatest() {
+    try {
+      const r = await fetch(`${cfg.server}/${encodeURIComponent(cfg.channel)}/json?poll=1&since=latest`, { cache: "no-store" });
+      if (!r.ok) throw new Error(r.status);
+      const lines = (await r.text()).split("\n").filter(Boolean);
+      for (const line of lines) { try { handleRelayMessage(JSON.parse(line)); } catch (e) {} }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  let reconnectTimer = null;
+  async function connect() {
+    if (!cfg.channel) return;
+    clearTimeout(reconnectTimer);
+    if (es) { es.close(); es = null; }
+    setConn(job ? "reconnecting" : "connecting");
+    const ok = await fetchLatest();
+    if (!ok && !navigator.onLine) setConn("offline");
+    const url = `${cfg.server}/${encodeURIComponent(cfg.channel)}/sse` + (lastId ? `?since=${encodeURIComponent(lastId)}` : "");
+    es = new EventSource(url);
+    es.addEventListener("open", () => setConn("live"));
+    es.addEventListener("keepalive", () => { gotAnyEvent = Date.now(); setConn("live"); });
+    es.onopen = () => setConn("live");
+    es.onmessage = (e) => {
+      gotAnyEvent = Date.now();
+      setConn("live");
+      try { handleRelayMessage(JSON.parse(e.data)); } catch (err) {}
+    };
+    es.onerror = () => {
+      setConn(navigator.onLine ? "reconnecting" : "offline");
+      if (es && es.readyState === EventSource.CLOSED) {
+        reconnectTimer = setTimeout(connect, 5000);
+      }
+    };
+    render();
+  }
+
+  // iOS pauses pages in the background; reconnect and catch up on return.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") { connect(); requestWake(); }
+  });
+  window.addEventListener("online", connect);
+  window.addEventListener("hashchange", () => { cfg = readConfig(); start(); });
+
+  // ---------- keep screen on (optional) ----------
+  let wakeWanted = load("rt_wake") === "1", wakeLock = null;
+  async function requestWake() {
+    if (!wakeWanted || !("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+    try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+  if ("wakeLock" in navigator) {
+    const btn = $("wakeBtn");
+    btn.hidden = false;
+    const paint = () => { btn.classList.toggle("on", wakeWanted); btn.textContent = wakeWanted ? "Screen stays on ✓" : "Keep screen on"; };
+    paint();
+    btn.onclick = async () => {
+      wakeWanted = !wakeWanted;
+      store("rt_wake", wakeWanted ? "1" : "0");
+      paint();
+      if (wakeWanted) requestWake(); else if (wakeLock) { wakeLock.release(); wakeLock = null; }
+    };
+    requestWake();
+  }
+
+  // ---------- setup ----------
+  function showSetup(on) {
+    document.body.classList.toggle("needs-setup", on);
+    if (on) {
+      $("chanIn").value = cfg.channel;
+      $("srvIn").value = cfg.server === DEFAULT_SERVER ? "" : cfg.server;
+      $("file").textContent = "Render Tracker";
+      $("sub").textContent = "Not connected";
+    }
+  }
+  $("settingsBtn").onclick = () => showSetup(!document.body.classList.contains("needs-setup") || !cfg.channel);
+  $("saveBtn").onclick = () => {
+    const c = $("chanIn").value.trim().replace(/^.*#c=/, "").replace(/&.*$/, "");
+    const s = $("srvIn").value.trim().replace(/\/+$/, "");
+    if (!/^[-_A-Za-z0-9]{1,64}$/.test(c)) { $("chanIn").focus(); toast("That channel name doesn't look right"); return; }
+    const h = new URLSearchParams();
+    h.set("c", c);
+    if (s && s !== DEFAULT_SERVER) h.set("s", s);
+    // Putting it in the URL means "Add to Home Screen" remembers it.
+    history.replaceState(null, "", "#" + h.toString());
+    cfg = readConfig();
+    job = null; lastId = null;
+    start();
+  };
+
+  function start() {
+    if (!cfg.channel) { showSetup(true); setConn("offline"); $("connText").textContent = "Not set"; return; }
+    showSetup(false);
+    connect();
+  }
+
+  setInterval(() => { if (document.visibilityState === "visible") render(); }, 1000);
+  start();
+})();
+</script>
+</body>
+</html>
